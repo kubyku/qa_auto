@@ -40,7 +40,7 @@ jobs:
           SHEET_RANGE: ${{ secrets.SHEET_RANGE }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
-          python main.py
+          python -u qa_auto/main.py
 
       - name: Upload artifacts
         if: always()
