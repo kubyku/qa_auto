@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>QA Auto Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .summary { display: flex; gap: 20px; margin-bottom: 20px; }
+    .box { padding: 15px; border-radius: 8px; background: #f4f4f4; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #eee; }
+    .PASS { color: green; }
+    .FAIL { color: red; }
+    .ERROR { color: orange; }
+  </style>
+</head>
+<body>
+
+<h1>QA Auto Dashboard</h1>
+<form action="/run" method="post" style="margin: 16px 0;">
+    <button type="submit" style="padding:10px 14px; border-radius:8px; cursor:pointer;">
+      Run tests
+    </button>
+  </form>
+  
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="margin: 10px 0;">
+        {% for category, msg in messages %}
+          <pre style="white-space:pre-wrap; padding:12px; border-radius:8px;
+                      background: {{ '#e8fff0' if category=='success' else '#ffecec' }};">
+  {{ msg }}
+          </pre>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+  
+<p>Last Run: {{ executed_at }}</p>
+
+<div class="summary">
+  <div class="box">PASS: {{ summary.pass }}</div>
+  <div class="box">FAIL: {{ summary.fail }}</div>
+  <div class="box">ERROR: {{ summary.error }}</div>
+</div>
+
+<table>
+  <tr>
+    <th>ID</th>
+    <th>Name</th>
+    <th>Engine</th>
+    <th>Status</th>
+  </tr>
+  {% for r in results %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td>{{ r.name }}</td>
+    <td>{{ r.engine }}</td>
+    <td class="{{ r.status }}">{{ r.status }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+</body>
+</html>

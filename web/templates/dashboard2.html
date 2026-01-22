@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QA 테스트 자동화 대시보드</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+  <script defer src="/static/dashboard.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="title">
+        <span class="logo">🎯</span>
+        <span>QA 테스트 자동화 대시보드</span>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" onclick="location.reload()">새로고침</button>
+        <form action="/run" method="post">
+          <button class="btn primary" type="submit">전체 실행</button>
+        </form>
+        {% if actions_url %}
+          <a class="btn dark" href="{{ actions_url }}" target="_blank" rel="noreferrer">GitHub Actions</a>
+        {% else %}
+          <button class="btn dark" disabled title="GITHUB_ACTIONS_URL env가 필요합니다">GitHub Actions</button>
+        {% endif %}
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash">
+          {% for category, msg in messages %}
+            <pre class="flashbox {{ category }}">{{ msg }}</pre>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="cards">
+      <div class="card">
+        <div class="card-icon">📊</div>
+        <div class="card-label">전체 테스트</div>
+        <div class="card-value">{{ cards.total }}</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">✅</div>
+        <div class="card-label">성공</div>
+        <div class="card-value">{{ cards.pass }}</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">❌</div>
+        <div class="card-label">실패</div>
+        <div class="card-value">{{ cards.fail }}</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🆕</div>
+        <div class="card-label">신규</div>
+        <div class="card-value">{{ cards.new }}</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📈</div>
+        <div class="card-label">성공률</div>
+        <div class="card-value">{{ cards.rate }}%</div>
+      </div>
+    </section>
+
+    <section class="tabs">
+      <button class="tab active" data-tab="cases">🧾 테스트 케이스</button>
+      <button class="tab" data-tab="runs">🧾 실행 히스토리</button>
+      <button class="tab" data-tab="actions">🚀 GitHub Actions</button>
+    </section>
+
+    <main class="panel">
+      <!-- 케이스 탭 -->
+      <div class="tabpane active" id="tab-cases">
+        <div class="toolbar">
+          <input id="caseSearch" class="search" placeholder="검색..." />
+          <select id="caseFilter" class="select">
+            <option value="all">전체</option>
+            <option value="new">NEW</option>
+          </select>
+        </div>
+
+        <div id="caseList" class="list">
+          {% for c in cases %}
+            <div class="item" data-id="{{ c.id }}" data-name="{{ c.name }}">
+              <div class="tag">#{{ c.id }}</div>
+              <div class="name">{{ c.name }}</div>
+              <div class="badge">NEW</div>
+            </div>
+          {% endfor %}
+          {% if cases|length == 0 %}
+            <div class="empty">케이스가 없습니다. SHEET_ID/SHEET_RANGE 환경변수를 확인하세요.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 실행 히스토리 탭 -->
+      <div class="tabpane" id="tab-runs">
+        <div class="subhead">
+          {% if latest_run %}
+            <div>최근 실행: {{ latest_run.executed_at }}</div>
+          {% else %}
+            <div>최근 실행: 없음</div>
+          {% endif %}
+        </div>
+
+        <div class="list">
+          {% for run in runs %}
+            <div class="run">
+              <div class="run-head">
+                <div class="run-time">{{ run.executed_at }}</div>
+                <div class="run-sum">
+                  PASS {{ run.summary.pass }} /
+                  FAIL {{ run.summary.fail }} /
+                  ERROR {{ run.summary.error }}
+                </div>
+              </div>
+
+              <div class="run-results">
+                {% for r in run.results %}
+                  <div class="r {{ r.status }}">
+                    <span class="rid">{{ r.id }}</span>
+                    <span class="rname">{{ r.name }}</span>
+                    <span class="rengine">{{ r.engine }}</span>
+                    <span class="rstatus">{{ r.status }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+          {% if runs|length == 0 %}
+            <div class="empty">아직 실행 이력이 없습니다. “전체 실행”을 눌러보세요.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Actions 탭 -->
+      <div class="tabpane" id="tab-actions">
+        {% if actions_url %}
+          <div class="actions-box">
+            <div class="empty">GitHub Actions로 이동해 실행/로그를 확인하세요.</div>
+            <a class="btn dark" href="{{ actions_url }}" target="_blank" rel="noreferrer">GitHub Actions 열기</a>
+          </div>
+        {% else %}
+          <div class="empty">
+            GITHUB_ACTIONS_URL 환경변수가 없어서 링크를 표시할 수 없습니다.<br/>
+            예: export GITHUB_ACTIONS_URL="https://github.com/USER/REPO/actions"
+          </div>
+        {% endif %}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

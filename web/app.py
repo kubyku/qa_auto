@@ -1,99 +1,94 @@
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT))
-
-import json
-from pathlib import Path
-from flask import Flask, redirect, render_template_string, url_for
-
-# 프로젝트 루트 경로 잡기
-ROOT = Path(__file__).resolve().parents[1]
-HISTORY_FILE = ROOT / "history" / "test_history.json"
-
-# main.py의 main()을 호출해서 실행시키는 방식(가장 단순)
-import main as runner_main  # main.py
+from flask import Flask, render_template, redirect, url_for, flash
+import json, os, subprocess, sys
+from datetime import datetime, timezone
 
 app = Flask(__name__)
+app.secret_key = "qa-auto-local"
 
-HTML = """
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>QA Auto Dashboard</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 24px; }
-      button { padding: 10px 14px; cursor: pointer; }
-      table { border-collapse: collapse; width: 100%; margin-top: 16px; }
-      th, td { border: 1px solid #ddd; padding: 8px; font-size: 14px; }
-      th { background: #f5f5f5; text-align: left; }
-      .pass { color: #0a0; }
-      .fail { color: #a00; }
-      .error { color: #a60; }
-    </style>
-  </head>
-  <body>
-    <h1>QA Auto Dashboard</h1>
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+HISTORY_PATH = os.path.join(BASE_DIR, "history", "test_history.json")
+MAIN_PATH = os.path.join(BASE_DIR, "main.py")
 
-    <form action="{{ url_for('run') }}" method="post">
-      <button type="submit">Run tests</button>
-    </form>
-
-    <h2>Recent history</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>started_at</th>
-          <th>id</th>
-          <th>engine</th>
-          <th>name</th>
-          <th>status</th>
-          <th>duration_ms</th>
-          <th>error</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in rows %}
-        <tr>
-          <td>{{ r.get('started_at','') }}</td>
-          <td>{{ r.get('id','') }}</td>
-          <td>{{ r.get('engine','') }}</td>
-          <td>{{ r.get('name','') }}</td>
-          <td class="{{ r.get('status','') }}">{{ r.get('status','') }}</td>
-          <td>{{ r.get('duration_ms','') }}</td>
-          <td>{{ r.get('error','') }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </body>
-</html>
-"""
-
-def read_history(limit: int = 50):
-    if not HISTORY_FILE.exists():
-        return []
+def _read_json(path, default):
     try:
-        data = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
-        if not isinstance(data, list):
-            return []
-        return list(reversed(data))[:limit]
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
+        return default
+
+def get_runs():
+    data = _read_json(HISTORY_PATH, [])
+    return data if isinstance(data, list) else []
+
+def get_latest_run():
+    runs = get_runs()
+    return runs[-1] if runs else None
+
+def get_cases_from_sheets():
+    # main.py와 동일한 env 사용
+    sheet_id = os.getenv("SHEET_ID", "").strip()
+    sheet_range = os.getenv("SHEET_RANGE", "testcase!A1:E100").strip()
+    if not sheet_id:
         return []
 
-@app.get("/")
-def index():
-    rows = read_history(limit=50)
-    return render_template_string(HTML, rows=rows)
+    from loaders.sheets_loader import load_cases_from_sheets
+    cases = load_cases_from_sheets(sheet_id, sheet_range)
+    # dataclass -> dict
+    return [c.__dict__ for c in cases]
 
-@app.post("/run")
-def run():
-    runner_main.main()  # main.py 실행
-    return redirect(url_for("index"))
+def calc_cards(latest_run, cases):
+    total = len(cases)
+    p = f = e = 0
+    if latest_run and isinstance(latest_run, dict):
+        s = latest_run.get("summary", {}) or {}
+        p = int(s.get("pass", 0) or 0)
+        f = int(s.get("fail", 0) or 0)
+        e = int(s.get("error", 0) or 0)
+    denom = (p + f + e)
+    rate = int(round((p / denom) * 100)) if denom else 0
+    # 신규(new)는 일단 “전체”로 두고, 다음 단계에서 규칙 정의(최근 7일 생성 등)
+    new_cnt = total
+    return {"total": total, "pass": p, "fail": f, "new": new_cnt, "rate": rate}
+
+@app.route("/")
+def dashboard():
+    cases = get_cases_from_sheets()
+    runs = get_runs()
+    latest = runs[-1] if runs else None
+    cards = calc_cards(latest, cases)
+
+    actions_url = os.getenv("GITHUB_ACTIONS_URL", "").strip()
+    return render_template(
+        "dashboard2.html",
+        cards=cards,
+        cases=cases,
+        runs=runs[::-1],   # 최신 먼저
+        latest_run=latest,
+        actions_url=actions_url,
+    )
+
+@app.route("/run", methods=["POST"])
+def run_tests():
+    env = os.environ.copy()
+
+    proc = subprocess.run(
+        [sys.executable, "-u", MAIN_PATH],
+        cwd=BASE_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    output = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+
+    if proc.returncode != 0:
+        flash((output[-2000:] if output else "Test run failed."), "error")
+    else:
+        flash("Test run completed.", "success")
+
+    return redirect(url_for("dashboard"))
 
 if __name__ == "__main__":
     app.run(debug=True)
