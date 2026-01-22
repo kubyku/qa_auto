@@ -9,3 +9,5 @@ reports/
 # python
 __pycache__/
 .venv/
+.DS_Store
+FETCH_HEAD

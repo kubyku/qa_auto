@@ -1,0 +1,4 @@
+id,engine,name,url,assert_title_contains
+TC-001,playwright,Example dot com should load,https://example.com,Example Domain
+TC-002,playwright,HTTPBin should load,https://httpbin.org,httpbin
+TC-003,playwright,Wrong title sample (should fail),https://example.com,NOT_MATCHING_TITLE
