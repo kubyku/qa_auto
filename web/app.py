@@ -1,9 +1,3 @@
-from dotenv import load_dotenv
-import os
-
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
-
 from __future__ import annotations
 
 import io
@@ -12,14 +6,24 @@ import os
 import subprocess
 import sys
 import zipfile
+from datetime import datetime, timezone
 
 import requests
-from flask import Flask, render_template, redirect, url_for, flash
+from dotenv import load_dotenv
+from flask import Flask, flash, redirect, render_template, url_for
 
+# ---------------------------------
+# Env (.env) load
+# ---------------------------------
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+# ---------------------------------
+# Flask app
+# ---------------------------------
 app = Flask(__name__)
 app.secret_key = "qa-auto-local"
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 HISTORY_PATH = os.path.join(BASE_DIR, "history", "test_history.json")
 MAIN_PATH = os.path.join(BASE_DIR, "main.py")
 
@@ -59,6 +63,7 @@ def get_cases_from_sheets():
 def calc_cards(latest_run, cases):
     total = len(cases)
     p = f = e = 0
+
     if latest_run and isinstance(latest_run, dict):
         s = latest_run.get("summary", {}) or {}
         p = int(s.get("pass", 0) or 0)
@@ -68,7 +73,8 @@ def calc_cards(latest_run, cases):
     denom = (p + f + e)
     rate = int(round((p / denom) * 100)) if denom else 0
 
-    new_cnt = total  # 지금은 전체로(다음 단계에서 규칙 정의)
+    # 신규(new)는 일단 전체로(추후 규칙 정의 가능)
+    new_cnt = total
     return {"total": total, "pass": p, "fail": f, "new": new_cnt, "rate": rate}
 
 
@@ -78,8 +84,8 @@ def calc_cards(latest_run, cases):
 def fetch_latest_test_history_from_github():
     """
     GitHub Actions artifact(name=test-history) 중 최신 것을 내려받아
-    history JSON(list)을 파싱해서 반환.
-    실패하면 None 반환.
+    history/test_history.json 을 파싱해서 반환.
+    실패하면 (None, "에러메시지") 반환.
     """
     owner = os.getenv("GITHUB_OWNER", "").strip()
     repo = os.getenv("GITHUB_REPO", "").strip()
@@ -94,7 +100,6 @@ def fetch_latest_test_history_from_github():
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
-    # 1) artifact 목록 조회
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/artifacts?per_page=50"
     r = requests.get(url, headers=headers, timeout=20)
     if r.status_code != 200:
@@ -114,12 +119,10 @@ def fetch_latest_test_history_from_github():
     if not archive_url:
         return None, "archive_download_url이 없습니다."
 
-    # 2) zip 다운로드
     z = requests.get(archive_url, headers=headers, timeout=60)
     if z.status_code != 200:
         return None, f"Artifact zip 다운로드 실패: {z.status_code} {z.text[:500]}"
 
-    # 3) zip 내부에서 test_history.json 찾기
     with zipfile.ZipFile(io.BytesIO(z.content)) as zipf:
         names = zipf.namelist()
 
@@ -188,6 +191,14 @@ def dashboard():
         actions_url=actions_url,
     )
 
+@app.route("/__routes")
+def __routes():
+    # 현재 서버에 등록된 라우트들을 텍스트로 보여줌
+    lines = []
+    for r in sorted(app.url_map.iter_rules(), key=lambda x: str(x)):
+        methods = ",".join(sorted(m for m in r.methods if m not in {"HEAD", "OPTIONS"}))
+        lines.append(f"{methods:10s} {r.rule:30s} -> {r.endpoint}")
+    return "<pre>" + "\n".join(lines) + "</pre>"
 
 @app.route("/run", methods=["POST"])
 def run_tests():
@@ -209,6 +220,21 @@ def run_tests():
         flash("Test run completed.", "success")
 
     return redirect(url_for("dashboard"))
+
+
+# (선택) 환경변수 확인용 디버그 라우트
+@app.route("/debug-env")
+def debug_env():
+    token = os.getenv("GITHUB_TOKEN", "")
+    return {
+        "BASE_DIR": BASE_DIR,
+        "cwd": os.getcwd(),
+        "GITHUB_OWNER": os.getenv("GITHUB_OWNER"),
+        "GITHUB_REPO": os.getenv("GITHUB_REPO"),
+        "GITHUB_TOKEN_prefix": (token[:10] if token else None),
+        "SHEET_ID_set": bool(os.getenv("SHEET_ID")),
+        "SHEET_RANGE": os.getenv("SHEET_RANGE"),
+    }
 
 
 if __name__ == "__main__":
