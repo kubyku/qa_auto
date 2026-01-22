@@ -1,0 +1,11 @@
+# secrets
+credentials.json
+.env
+
+# local outputs
+history/
+reports/
+
+# python
+__pycache__/
+.venv/
