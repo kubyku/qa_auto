@@ -23,12 +23,17 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps
           
-      - name: Write Google credentials.json (base64)
-        env:    
-          GOOGLE_CREDENTIALS_B64: ${{ secrets.GOOGLE_CREDENTIALS_B64 }}
+      - name: Write Google credentials.json
         run: |
-          echo "$GOOGLE_CREDENTIALS_B64" | base64 --decode > credentials.json
-          python -c "import json; json.load(open('credentials.json')); print('credentials.json OK')"
+          cat << 'EOF' > credentials.json
+      ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+      EOF
+          python - << 'EOF'
+      import json
+      json.load(open("credentials.json"))
+      print("credentials.json OK")
+      EOF
+
 
 
 
