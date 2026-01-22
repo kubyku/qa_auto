@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import time
@@ -68,20 +69,15 @@ def append_run_history(results: List[TestResult]) -> None:
     """
     ensure_history_file()
 
-    # load existing
     try:
         existing = json.loads(HISTORY_FILE.read_text(encoding="utf-8"))
     except Exception:
         existing = []
 
-    # if old format (list of TestResult dicts), reset to empty
+    # old format 방어: list[TestResult] 형태면 새 포맷으로 전환
     if isinstance(existing, list) and existing:
         first = existing[0]
-        if (
-            isinstance(first, dict)
-            and ("id" in first and "status" in first)
-            and ("results" not in first)
-        ):
+        if isinstance(first, dict) and ("id" in first and "status" in first) and ("results" not in first):
             existing = []
 
     if not isinstance(existing, list):
@@ -197,18 +193,30 @@ def run_all(cases: List[TestCase]) -> List[TestResult]:
 # Main
 # -----------------------------
 def main() -> None:
-    # sheets loader
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--case", help="Run single test case by id (e.g., TC-001)")
+    args = parser.parse_args()
+
     from loaders.sheets_loader import load_cases_from_sheets
 
     # Prefer env (works for local + CI + dashboard)
     sheet_id = os.getenv("SHEET_ID", "").strip()
     sheet_range = os.getenv("SHEET_RANGE", "testcase!A1:E100").strip()
 
-    # Fallback: allow hardcode if env not set (초보 방어)
+    # Fallback (초보 방어)
     if not sheet_id:
         sheet_id = "1eyWcXsz8pKGDV_LSjqJA720_rIfe1a_TobsRAqolSA4"
 
     cases = load_cases_from_sheets(sheet_id, sheet_range)
+
+    # ---- 여기부터 "단일 케이스 실행" 추가 ----
+    if args.case:
+        cases = [c for c in cases if c.id == args.case]
+        if not cases:
+            print(f"[ERROR] Test case not found: {args.case}")
+            print("[HINT] Available case ids:", [c.id for c in load_cases_from_sheets(sheet_id, sheet_range)])
+            return
+    # ------------------------------------
 
     print(f"[INPUT] sheets: {sheet_id} / {sheet_range}")
     print(f"[INPUT] loaded cases: {len(cases)}")
