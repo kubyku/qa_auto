@@ -49,3 +49,11 @@ jobs:
           name: qa-auto-artifacts
           path: |
             history/test_history.json
+
+      - name: Upload test history artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-history
+          path: history/test_history.json
+          if-no-files-found: warn
+          retention-days: 7
