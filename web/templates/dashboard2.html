@@ -19,6 +19,10 @@
         <form action="/run" method="post">
           <button class="btn primary" type="submit">전체 실행</button>
         </form>
+        <form action="/sync_github" method="post">
+          <button class="btn ghost" type="submit">GitHub 결과 불러오기</button>
+        </form>
+
         {% if actions_url %}
           <a class="btn dark" href="{{ actions_url }}" target="_blank" rel="noreferrer">GitHub Actions</a>
         {% else %}
